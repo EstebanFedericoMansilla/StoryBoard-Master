@@ -440,6 +440,7 @@
         let animationInterval = null;
         let isPlaying = false;
         let audioLoaded = false;
+        let copiedFrame = null; // Variable para almacenar el fotograma copiado
 
         // Elementos del DOM
         const canvas = document.getElementById('drawingCanvas');
@@ -686,19 +687,42 @@
 
         // Gestión de frames
         function addFrame() {
+            // Antes de insertar, guarda el estado del fotograma actual
+            saveCurrentFrame();
+
+            // Limpiar canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const frame = {
-                id: frames.length,
+
+            // Crear el nuevo fotograma con datos actuales de notas/duración/transición
+            const newFrame = {
+                id: null, // se asignará después
                 imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
                 notes: document.getElementById('sceneNotes').value,
                 duration: document.getElementById('sceneDuration').value,
                 transition: document.getElementById('sceneTransition').value
             };
-            frames.push(frame);
-            currentFrame = frames.length - 1;
+
+            // Determinar posición de inserción: justo después del fotograma seleccionado
+            const insertIndex = (currentFrame >= 0 && currentFrame < frames.length)
+                ? currentFrame + 1
+                : frames.length;
+
+            // Insertar en lugar de push
+            frames.splice(insertIndex, 0, newFrame);
+
+            // Reasignar IDs para mantener orden
+            frames.forEach((frame, idx) => {
+                frame.id = idx;
+            });
+
+            // Actualizar puntero al nuevo fotograma
+            currentFrame = insertIndex;
+
+            // Refrescar timeline y pintar el nuevo fotograma
             updateFramesList();
             loadFrame(currentFrame);
         }
+
 
         function deleteFrame(index) {
             frames.splice(index, 1);
@@ -735,9 +759,17 @@
                     <div class="text-center text-secondary" style="font-size: 0.8em;">
                         ${frame.duration || 3}s
                     </div>
-                    <button class="btn btn-sm btn-outline-danger mt-1 w-100" onclick="deleteFrame(${index})">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="btn-group w-100">
+                        <button class="btn btn-sm btn-outline-primary" onclick="copyFrame(${index})" title="Copiar fotograma">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-success" onclick="pasteFrame(${index})" title="Pegar fotograma después de este">
+                            <i class="fas fa-paste"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteFrame(${index})" title="Eliminar fotograma">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
             `).join('');
             // Renderizar miniaturas
@@ -838,7 +870,19 @@
         // Atajos de teclado
         function handleKeyboard(e) {
             if (e.ctrlKey || e.metaKey) {
-                switch(e.key.toLowerCase()) {
+                switch (e.key.toLowerCase()) {
+                    case 'c': // Copiar fotograma
+                        if (currentFrame >= 0) {
+                            copyFrame(currentFrame);
+                        }
+                        e.preventDefault();
+                        break;
+                    case 'v': // Pegar fotograma
+                        if (currentFrame >= 0) {
+                            pasteFrame(currentFrame);
+                        }
+                        e.preventDefault();
+                        break;
                     case 'z':
                         if (e.shiftKey) {
                             redo();
@@ -1044,6 +1088,52 @@
                 link.download = `frame_${index + 1}.png`;
                 link.click();
             });
+        }
+
+        function copyFrame(index) {
+            const frameToCopy = frames[index];
+            if (!frameToCopy) return;
+
+            copiedFrame = {
+                imageData: new ImageData(
+                    new Uint8ClampedArray(frameToCopy.imageData.data),
+                    frameToCopy.imageData.width,
+                    frameToCopy.imageData.height
+                ),
+                notes: frameToCopy.notes,
+                duration: frameToCopy.duration,
+                transition: frameToCopy.transition
+            };
+            alert('Fotograma copiado.');
+        }
+
+        function pasteFrame(index) {
+            if (!copiedFrame) {
+                alert('No hay fotograma copiado para pegar.');
+                return;
+            }
+
+            const newFrame = {
+                id: null,
+                imageData: new ImageData(
+                    new Uint8ClampedArray(copiedFrame.imageData.data),
+                    copiedFrame.imageData.width,
+                    copiedFrame.imageData.height
+                ),
+                notes: copiedFrame.notes,
+                duration: copiedFrame.duration,
+                transition: copiedFrame.transition
+            };
+
+            frames.splice(index + 1, 0, newFrame);
+            frames.forEach((frame, idx) => {
+                frame.id = idx;
+            });
+
+            currentFrame = index + 1;
+            updateFramesList();
+            loadFrame(currentFrame);
+            alert('Fotograma pegado.');
         }
 
         init();
